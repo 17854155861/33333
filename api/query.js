@@ -40,7 +40,7 @@ function parseCookies(response) {
 }
 
 // 点数查询主函数
-async function queryPoints(email, password, captcha = '') {
+async function queryPoints(email, password, captcha = '', sessionCookie = '') {
   const baseUrl = 'api.wuyinkeji.com';
   let cookies = [];
 
@@ -62,14 +62,19 @@ async function queryPoints(email, password, captcha = '') {
   };
 
   try {
-    // Step 1: GET login page
-    const loginPage = await request({
-      hostname: baseUrl,
-      path: '/user/login',
-      method: 'GET',
-      headers: { ...headersHtml, 'Cookie': cookies.join('; ') },
-    });
-    cookies = parseCookies(loginPage);
+    // Step 1: GET login page（如果前端已传入 session 则复用，否则重新获取）
+    if (sessionCookie) {
+      // 复用前端获取验证码时的 session
+      cookies = sessionCookie.split('; ').filter(Boolean);
+    } else {
+      const loginPage = await request({
+        hostname: baseUrl,
+        path: '/user/login',
+        method: 'GET',
+        headers: { ...headersHtml, 'Cookie': '' },
+      });
+      cookies = parseCookies(loginPage);
+    }
 
     // Step 2: POST login
     const loginData = new URLSearchParams({
@@ -165,7 +170,7 @@ module.exports = async (req, res) => {
   // 处理 POST 请求
   if (req.method === 'POST') {
     try {
-      const { email, password, captcha } = req.body || {};
+      const { email, password, captcha, session } = req.body || {};
 
       if (!email || !password) {
         res.status(400).json({ success: false, message: '邮箱或密码不能为空' });
@@ -173,7 +178,12 @@ module.exports = async (req, res) => {
       }
 
       console.log(`Query account: ${email}`);
-      const result = await queryPoints(email.trim(), password.trim(), (captcha || '').trim());
+      const result = await queryPoints(
+        email.trim(),
+        password.trim(),
+        (captcha || '').trim(),
+        (session || '').trim()
+      );
       res.status(200).json(result);
 
     } catch (error) {
